@@ -27,7 +27,7 @@
 #include <dirent.h>
 #include <math.h>
 #include <mach/mach.h>
-#include <mach/mach_vm.h>
+#include "apple/vm_compat.h"
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -1812,8 +1812,8 @@ static void resident_snapshot(Resident *r) {
  * the region (gfx_guest_unmapped), but only if the memory held an nvmap allocation when it went.
  * (The kernel reads it for us: an unmapped or inaccessible page fails the call, not the process.) */
 static int read_guarded(void *dst, u64 g, u32 n) {
-    mach_vm_size_t got = 0;
-    kern_return_t kr = mach_vm_read_overwrite(mach_task_self(), (mach_vm_address_t)(uintptr_t)G2H(g), n, (mach_vm_address_t)(uintptr_t)dst, &got);
+    rt_vm_size_t got = 0;
+    kern_return_t kr = rt_vm_read_overwrite(mach_task_self(), (rt_vm_address_t)(uintptr_t)G2H(g), n, (rt_vm_address_t)(uintptr_t)dst, &got);
     return kr == KERN_SUCCESS && got == n;
 }
 
@@ -4574,6 +4574,7 @@ void gfx_present(u64 guest, u32 width, u32 height) {
     LARGE_INTEGER p0, p1;
     QueryPerformanceCounter(&p0);
     dispatch_semaphore_wait(frames_free, DISPATCH_TIME_FOREVER);
+    #if !TARGET_OS_IPHONE
     if (layer) {
         int sync = !(display_present_flags() & 0x200);   /* (VRR pacing: shown at once, as Direct3D's ALLOW_TEARING) */
         if (layer.displaySyncEnabled != sync) {
@@ -4583,6 +4584,7 @@ void gfx_present(u64 guest, u32 width, u32 height) {
             [CATransaction commit];
         }
     }
+    #endif
     id<CAMetalDrawable> drawable = layer ? [layer nextDrawable] : nil;
     QueryPerformanceCounter(&p1);
     gfx_stat_present_ticks += (u64)(p1.QuadPart - p0.QuadPart);
@@ -4669,7 +4671,7 @@ static WINDOWS_BOOL CALLBACK init(PINIT_ONCE o, PVOID p, PVOID *c) {
         }
         if (!layer) fprintf(stderr, "[gfx] no window to draw into: frames are drawn but not shown\n");
         queue = [dev newCommandQueueWithMaxCommandBufferCount:64];
-        if (@available(macOS 13.3, *)) dev.shouldMaximizeConcurrentCompilation = YES;   /* (the compiler threads' compiles, side by side) */
+        if (@available(macOS 13.3, iOS 16.4, *)) dev.shouldMaximizeConcurrentCompilation = YES;   /* (the compiler threads' compiles, side by side) */
         NSError *err = nil;
         builtin = [dev newLibraryWithSource:@(BUILTIN_MSL) options:msl_options() error:&err];
         if (!builtin) {
@@ -4720,11 +4722,13 @@ static WINDOWS_BOOL CALLBACK init(PINIT_ONCE o, PVOID p, PVOID *c) {
             [CATransaction setDisableActions:YES];
             layer.device = dev;
             layer.maximumDrawableCount = latency >= 2 ? 3 : 2;
+#if !TARGET_OS_IPHONE
             layer.displaySyncEnabled = YES;
+#endif
             layer.allowsNextDrawableTimeout = YES;
             [CATransaction commit];
         }
-        display_set_tearing(1);   /* (displaySyncEnabled off: frames shown as soon as they are done) */
+        display_set_tearing(!TARGET_OS_IPHONE);   /* (displaySyncEnabled off: frames shown as soon as they are done) */
         start_compilers();
         /* The prewarm compiles the disk cache's MSL while the game starts: Metal keeps what it
          * compiled in its own cache, so a cache that was compiled before takes a fraction of a

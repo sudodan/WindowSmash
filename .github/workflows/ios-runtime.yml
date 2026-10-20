@@ -1,0 +1,51 @@
+name: iOS Apple runtime integration
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios/apple-runtime]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run synthetic runtime-core test on Mac ARM64
+        run: |
+          test "$(uname -m)" = arm64
+          mkdir -p build/core
+          FLAGS="-arch arm64 -mmacosx-version-min=14.4 -O2 -fno-strict-aliasing -ffp-contract=off -Iruntime/macos/include -Iruntime/linux/include -Iruntime -Iios/runtime"
+          for SRC in runtime/linux/win32.c runtime/macos/memory.c runtime/macos/platform.c runtime/macos/fiber.c runtime/macos/fiber_arm64.S ios/runtime/core_test.c; do
+            clang $FLAGS -DWS_RUNTIME_CLI -c "$SRC" -o "build/core/$(basename "$SRC").o"
+          done
+          for SRC in runtime/linux/eh.cpp ios/runtime/exception_test.cpp; do
+            clang++ $FLAGS -std=c++20 -c "$SRC" -o "build/core/$(basename "$SRC").o"
+          done
+          clang++ -arch arm64 build/core/*.o -o build/core/runtime-test
+          build/core/runtime-test
+      - name: Configure iPhone app and runtime compile audit
+        run: cmake -S ios/runtime -B build/ios-runtime -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=18.0
+      - name: Compile and link unsigned iPhone app
+        run: xcodebuild -project build/ios-runtime/WindowSmashRuntime.xcodeproj -scheme WindowSmashRuntime -configuration Release -sdk iphoneos -destination "generic/platform=iOS" CODE_SIGNING_ALLOWED=NO build
+      - name: Reject private wait APIs and package IPA
+        run: |
+          APP=build/ios-runtime/Release-iphoneos/WindowSmashRuntime.app
+          xcrun lipo "$APP/WindowSmashRuntime" -verify_arch arm64
+          if nm -u "$APP/WindowSmashRuntime" | grep -E '__ulock_(wait|wake)'; then
+            echo 'Unexpected private wait API in iPhone executable'
+            exit 1
+          fi
+          plutil -lint "$APP/Info.plist"
+          mkdir -p build/package/Payload
+          ditto "$APP" build/package/Payload/WindowSmashRuntime.app
+          cd build/package
+          ditto -c -k --keepParent Payload WindowSmashRuntime-unsigned.ipa
+          shasum -a 256 WindowSmashRuntime-unsigned.ipa > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-runtime-unsigned
+          path: |
+            build/package/WindowSmashRuntime-unsigned.ipa
+            build/package/SHA256SUMS.txt
+          if-no-files-found: error

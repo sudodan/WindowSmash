@@ -12,7 +12,7 @@
 #include <limits.h>
 #include <mach/mach.h>
 #include <mach/mach_time.h>
-#include <mach/mach_vm.h>
+#include "apple/vm_compat.h"
 #include <mach-o/dyld.h>
 #include <os/os_sync_wait_on_address.h>
 #include <pthread.h>
@@ -28,35 +28,46 @@ typedef uint64_t u64;
 
 /* ---- waiting on an address ---------------------------------------------------------------- */
 /* (libsystem_kernel's, since macOS 11: what os_sync_wait_on_address calls) */
+#if !TARGET_OS_IPHONE
 extern int __ulock_wait2(uint32_t operation, void *addr, uint64_t value, uint64_t timeout_ns, uint64_t value2);
 extern int __ulock_wake(uint32_t operation, void *addr, uint64_t wake_value);
 #define UL_COMPARE_AND_WAIT 1
 #define ULF_WAKE_ALL 0x00000100
 #define ULF_NO_ERRNO 0x01000000
 
+#endif
+
 static int os_sync = -1;   /* 1: os_sync_*, 0: __ulock_* */
 
 static int use_os_sync(void) {
+#if TARGET_OS_IPHONE
+    return 1; /* This iOS target requires 18.0; use only public os_sync APIs. */
+#else
     if (os_sync < 0) {
         const char *force = getenv("SSBU_FUTEX");
         int have = 0;
-        if (__builtin_available(macOS 14.4, *)) have = 1;
+        if (__builtin_available(macOS 14.4, iOS 17.4, *)) have = 1;
         os_sync = have && !(force && !strcmp(force, "ulock"));
     }
     return os_sync;
+#endif
 }
 
 const char *rt_futex_mode(void) { return use_os_sync() ? "os_sync_wait_on_address" : "__ulock_wait2"; }
 
 static int wait_once(volatile int *addr, int value, u64 ns) {   /* ns 0: no limit. 1 woken (or not holding value), 0 timed out */
     if (use_os_sync()) {
-        if (__builtin_available(macOS 14.4, *)) {
+        if (__builtin_available(macOS 14.4, iOS 17.4, *)) {
             int r = !ns ? os_sync_wait_on_address((void *)addr, (uint32_t)value, 4, OS_SYNC_WAIT_ON_ADDRESS_NONE)
                         : os_sync_wait_on_address_with_timeout((void *)addr, (uint32_t)value, 4, OS_SYNC_WAIT_ON_ADDRESS_NONE, OS_CLOCK_MACH_ABSOLUTE_TIME, ns);
             return !(r < 0 && errno == ETIMEDOUT);
         }
     }
+#if TARGET_OS_IPHONE
+    abort(); /* Deployment-target invariant: public API must be available. */
+#else
     return __ulock_wait2(UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, (void *)addr, (uint32_t)value, ns, 0) != -ETIMEDOUT;
+#endif
 }
 
 u64 rt_uptime_ns(void);
@@ -79,13 +90,17 @@ int rt_futex_wait(volatile int *addr, int value, DWORD ms) {
 /* Wake one thread waiting on addr, or all of them. */
 void rt_futex_wake(volatile int *addr, int all) {
     if (use_os_sync()) {
-        if (__builtin_available(macOS 14.4, *)) {
+        if (__builtin_available(macOS 14.4, iOS 17.4, *)) {
             if (all) os_sync_wake_by_address_all((void *)addr, 4, OS_SYNC_WAKE_BY_ADDRESS_NONE);
             else os_sync_wake_by_address_any((void *)addr, 4, OS_SYNC_WAKE_BY_ADDRESS_NONE);
             return;
         }
     }
+#if TARGET_OS_IPHONE
+    abort();
+#else
     __ulock_wake(UL_COMPARE_AND_WAIT | ULF_NO_ERRNO | (all ? ULF_WAKE_ALL : 0), (void *)addr, 0);
+#endif
 }
 
 /* ---- the clock ---------------------------------------------------------------------------- */
@@ -169,9 +184,9 @@ int rt_frame_walk(uint64_t pc, uint64_t lr, uint64_t fp, void **frames, int max)
     for (; n < max && fp && !(fp & 7);) {
         if (fp < from || fp + 16 > to) {
             u64 end = (fp + 16 + 0x3FFF) & ~0x3FFFull;
-            mach_vm_size_t got = 0;
+            rt_vm_size_t got = 0;
             if (end - fp > sizeof copy) end = fp + sizeof copy;
-            if (mach_vm_read_overwrite(mach_task_self(), fp, end - fp, (mach_vm_address_t)(uintptr_t)copy, &got) != KERN_SUCCESS || got < 16) break;
+            if (rt_vm_read_overwrite(mach_task_self(), fp, end - fp, (rt_vm_address_t)(uintptr_t)copy, &got) != KERN_SUCCESS || got < 16) break;
             from = fp;
             to = fp + got;
         }

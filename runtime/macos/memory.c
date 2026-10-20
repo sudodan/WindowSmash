@@ -35,7 +35,7 @@
  * host page, which stays as it was. */
 #include <errno.h>
 #include <mach/mach.h>
-#include <mach/mach_vm.h>
+#include "apple/vm_compat.h"
 #include <pthread.h>
 #include <sched.h>
 #include <stdio.h>
@@ -89,8 +89,8 @@ static int fresh(u64 at, u64 n) {
 static int window_ready;
 
 static kern_return_t reserve_fixed(u64 at, u64 size, vm_prot_t max) {
-    mach_vm_address_t a = at;
-    return mach_vm_map(mach_task_self(), &a, size, 0, VM_FLAGS_FIXED | TAG, MEMORY_OBJECT_NULL, 0, FALSE, VM_PROT_NONE, max, VM_INHERIT_DEFAULT);
+    rt_vm_address_t a = at;
+    return rt_vm_map(mach_task_self(), &a, size, 0, VM_FLAGS_FIXED | TAG, MEMORY_OBJECT_NULL, 0, FALSE, VM_PROT_NONE, max, VM_INHERIT_DEFAULT);
 }
 
 static int inside_window(u64 lo, u64 hi) { return window_ready && lo >= WINDOW_BASE && hi <= WINDOW_BASE + WINDOW_SIZE && lo < hi; }
@@ -219,12 +219,12 @@ int rt_ww_storable(const void *p, size_t n) {
             at += HPAGE;
             continue;
         }
-        mach_vm_address_t a = at;
-        mach_vm_size_t size = 0;
+        rt_vm_address_t a = at;
+        rt_vm_size_t size = 0;
         vm_region_basic_info_data_64_t vi;
         mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
         mach_port_t object = MACH_PORT_NULL;
-        if (mach_vm_region(mach_task_self(), &a, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&vi, &count, &object) != KERN_SUCCESS || a > at ||
+        if (rt_vm_region(mach_task_self(), &a, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&vi, &count, &object) != KERN_SUCCESS || a > at ||
             !(vi.protection & VM_PROT_WRITE))
             return 0;
         at = round_up(a + size, HPAGE);
@@ -335,13 +335,13 @@ static int commit_range(Reservation *r, u64 lo, u64 hi, int prot) {
  * read-only, so its neighbours are not written as far as the watch knows, and a store to one
  * meanwhile faults as before (and waits on the lock). 0 if there is no second mapping to be had. */
 static int zero_aside(u64 at, u64 lo, u64 hi) {
-    mach_vm_address_t alias = 0;
+    rt_vm_address_t alias = 0;
     vm_prot_t cur, max;
-    if (mach_vm_remap(mach_task_self(), &alias, HPAGE, 0, VM_FLAGS_ANYWHERE, mach_task_self(), at, FALSE, &cur, &max, VM_INHERIT_NONE) != KERN_SUCCESS)
+    if (rt_vm_remap(mach_task_self(), &alias, HPAGE, 0, VM_FLAGS_ANYWHERE, mach_task_self(), at, FALSE, &cur, &max, VM_INHERIT_NONE) != KERN_SUCCESS)
         return 0;
-    int ok = mach_vm_protect(mach_task_self(), alias, HPAGE, FALSE, VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS;
+    int ok = rt_vm_protect(mach_task_self(), alias, HPAGE, FALSE, VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS;
     if (ok) memset((void *)(uintptr_t)(alias + (lo - at)), 0, hi - lo);
-    mach_vm_deallocate(mach_task_self(), alias, HPAGE);
+    rt_vm_deallocate(mach_task_self(), alias, HPAGE);
     return ok;
 }
 
@@ -481,13 +481,13 @@ BOOL VirtualProtect(LPVOID address, SIZE_T size, DWORD protect, PDWORD old) {
 SIZE_T VirtualQuery(LPCVOID address, MEMORY_BASIC_INFORMATION *info, SIZE_T length) {
     if (length < sizeof *info) return 0;
     u64 a = round_down((u64)(uintptr_t)address, HPAGE);
-    mach_vm_address_t at = a;
-    mach_vm_size_t size = 0;
+    rt_vm_address_t at = a;
+    rt_vm_size_t size = 0;
     vm_region_basic_info_data_64_t vi;
     mach_msg_type_number_t n = VM_REGION_BASIC_INFO_COUNT_64;
     mach_port_t object = MACH_PORT_NULL;
     memset(info, 0, sizeof *info);
-    if (mach_vm_region(mach_task_self(), &at, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&vi, &n, &object) != KERN_SUCCESS) return 0;
+    if (rt_vm_region(mach_task_self(), &at, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&vi, &n, &object) != KERN_SUCCESS) return 0;
     if (at > a) {
         info->BaseAddress = (void *)(uintptr_t)a;
         info->RegionSize = at - a;
