@@ -20,7 +20,7 @@ The memory constants are a snapshot of host.h and tools/recomp.py at the commit 
 ## Current validation
 
 Linux x86-64 GCC: 18/18 CPU helper checks passed, including 20,000 atomic increments. AddressSanitizer and UndefinedBehaviorSanitizer also passed with leak detection disabled (LeakSanitizer cannot inspect processes in this environment). Both plist files parsed successfully.
-The first GitHub Actions run passed all 18 CPU checks on a macOS ARM64 runner using Apple Clang. Its initial iOS app compile exposed an unsupported mach_vm.h include; the probe now uses the iOS SDK vm_* interfaces with compile-time 64-bit size checks. The second build successfully compiled and linked the iOS ARM64 app using Xcode 16.4 / iOS 18.5 SDK (deployment target iOS 16). Packaging then failed due to lipo argument order, corrected in the following revision. No iPhone execution or iOS 26 runtime compatibility is claimed.
+The first GitHub Actions run passed all 18 CPU checks on a macOS ARM64 runner using Apple Clang. Its initial iOS app compile exposed an unsupported mach_vm.h include; the probe now uses the iOS SDK vm_* interfaces with compile-time 64-bit size checks. The second build successfully compiled and linked the iOS ARM64 app using Xcode 16.4 / iOS 18.5 SDK (deployment target iOS 16). Packaging then failed due to lipo argument order, corrected in the following revision. The third run passed compilation, ARM64 verification, plist validation and unsigned IPA packaging: https://github.com/sudodan/WindowSmash/actions/runs/39353295281 (commit 583d5820c0fe54a6ff52deb093f54c5229693351). Its artifact is `ios-probe-unsigned`. No iPhone execution or iOS 26 runtime compatibility is claimed.
 
 ## Build on macOS / hosted runner
 
@@ -69,3 +69,5 @@ cc -std=c11 -O2 -Wall -Wextra -fno-fast-math -ffp-contract=off \
 ## Windows installation route
 
 After the workflow succeeds, download its `ios-probe-unsigned` artifact and extract `WindowSmashProbe-unsigned.ipa`. It must still be signed. Sideloadly (https://sideloadly.io/) documents Windows installation with a free or paid Apple account and iOS 26 support. Enter credentials only in your local signing tool, never in this repository or chat. Follow its current Windows dependency instructions. Free-account apps require periodic re-signing. This baseline build does not request extended addressing; do not interpret a failure as a test of that entitlement.
+
+After local signing/installation, enable Developer Mode if prompted (Settings > Privacy & Security > Developer Mode, restart and confirm). Open Smash Probe and use its Share button to return the full report. If installation fails, preserve the exact error; if the app terminates, return the crash log rather than treating it as a passing run.
