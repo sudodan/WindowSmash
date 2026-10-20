@@ -7,6 +7,9 @@
 static char *report_out;
 static size_t report_cap, report_used;
 static int capture_vprintf(const char *fmt, va_list ap) {
+#ifdef WS_RENDERER_CLI
+    va_list copy;va_copy(copy,ap);vfprintf(stderr,fmt,copy);va_end(copy);fflush(stderr);
+#endif
     size_t left=report_used<report_cap?report_cap-report_used:0;
     int n=vsnprintf(left?report_out+report_used:NULL,left,fmt,ap);
     if(n>0) report_used+=(size_t)n<left?(size_t)n:left?left-1:0;
