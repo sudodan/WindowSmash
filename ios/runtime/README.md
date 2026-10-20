@@ -55,17 +55,35 @@ The **Boot synthetic guest** button runs 19 additional checks:
 `generate_boot_images.py` creates the small original fixtures at build time.
 `boot_services.c` supplies explicit peripheral test doubles: unexpected IPC is
 fatal, while unused GPU resource cleanup and networking cleanup are no-ops.
-Graphics, audio and game services are not established by this test. The shader
-translator and Metal renderer remain required compile-only targets.
+Graphics, audio and game services are not established by this test. The Metal
+renderer remains a required compile-only target. The shader translator is also linked and exercised by the separate shader test below.
 Cross-thread fiber migration and exception unwinding through generated game
 frames are also untested. The embedded boot is one-shot; restart the app to retry.
 Loader fatal paths and guest process termination still need production handling.
+
+## Translated shader GPU test (v0.3)
+
+**Test shaders** runs upstream `tools/mac/msltest.m`'s eight GPU test groups with
+our real `gpu_shader.c` translator: arithmetic, control flow, memory, textures,
+points, triangles, dual-source blending and texture LOD bias. Results are read
+back and compared with CPU expectations. It uses original hand-assembled Maxwell
+programs, with no game dump and no guest virtual-address reservation required.
+This exercises shader translation and Metal execution, not the full
+`gpu_metal.m` rendering backend or the game's command stream.
+
+`shader_test.m` embeds the existing tests and captures their printf diagnostics
+locally for the app's shareable report. Run it once per app launch, in the
+foreground, and wait for completion before starting the other test. A missing
+Metal device/queue is explicitly BLOCKED (CLI exit 77), not a pass. CI records
+that condition and continues the SDK build; other nonzero returns fail CI.
+The first hardware run may expose shader or texture-format compatibility issues.
 
 ## Build and run
 
 The `iOS Apple runtime integration` workflow first executes the core tests on a
 Mac ARM64 runner, boots the synthetic guest there, then builds the iPhone app
-and required compile-audit objects.
+and required compile-audit objects. It also attempts the translated shader GPU
+checks on the Mac runner and includes their report with the build artifact.
 It verifies architecture, checks private wait imports and packages
 `WindowSmashRuntime-unsigned.ipa` with a SHA-256 checksum. Mac execution is not
 an iPhone result. The unsigned artifact requires local signing before installation.
@@ -73,7 +91,17 @@ an iPhone result. The unsigned artifact requires local signing before installati
 No game files, keys, signing certificates or game-derived generated C belong in
 this public branch or its Actions artifacts. This app contains none.
 
-When device testing is available, install a signed app and share its report.
+When device testing is available:
+
+1. Install a signed copy of the latest unsigned IPA, then open the app.
+2. Wait for the automatic runtime-core report.
+3. Tap **Test shaders**, keep the app in the foreground, and wait for its status.
+4. Share that report before attempting guest boot, so it survives a possible crash.
+5. Tap **Boot synthetic guest**, then share the resulting report. If the app closes,
+   report which button was running and save the matching iOS crash log if available.
+
+These tests need no XCI file. They are diagnostics, not a playable game.
+
 The **Boot synthetic guest** button first attempts upstream's 512 GiB guest
 window starting at 1 TiB, with its optional guard reservations. This reserves
 virtual space, not that much physical RAM. The reservation stays until the app
@@ -89,6 +117,19 @@ synthetic boot, game boot or performance on the user's phone is assumed.
 - Private game code generation, signing, startup and memory/performance testing.
 
 ## Validation — 2026-10-20
+
+Successful v0.3 run: https://github.com/sudodan/WindowSmash/actions/runs/39493189608
+Build commit: `26fce6607d5740c7bed5f500247ee1f15ddcb2b0`.
+
+- All eight shader GPU groups passed: **16,287 comparisons, zero failures**.
+- The runner reports **Apple Paravirtual device**, not an iPhone GPU. These results
+  establish execution through that virtual Metal device only.
+- Runtime-core 20/20 and synthetic loader/kernel boot 19/19 checks still passed.
+- iPhone app including the real shader translator compiled, linked and packaged.
+- Unsigned IPA, checksum and shader execution report are in `ios-runtime-unsigned`.
+- No iPhone execution or full renderer execution has occurred.
+
+### Earlier loader/kernel milestone
 
 Successful v0.2 run: https://github.com/sudodan/WindowSmash/actions/runs/39491966955
 Build commit: `73e93c222aedd4a35c396050d46c8e124361da63`.
