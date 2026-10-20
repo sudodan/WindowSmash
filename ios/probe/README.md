@@ -97,3 +97,11 @@ a host with larger pages. A guest-page layer must track subpage commitments and
 avoid discarding neighboring guest pages. Independent permissions and true aliases
 also need design work. This limitation is deliberate and appears in the report.
 Windows runtime behavior is unchanged. No game startup or phone test is claimed.
+
+Version 3 validation: GitHub Actions run
+https://github.com/sudodan/WindowSmash/actions/runs/39374125375 passed on commit
+0d5dc0ad65828ce9c225790c930a0efe98d80502. The host memory tests passed 24/24 on
+macOS ARM64 with 16,384-byte host pages and locally on Linux with 4,096-byte
+pages. CPU helpers passed 18/18 and recompiled instruction checks passed
+15,360/15,360 on the Mac. Metal tests, iOS ARM64 compilation and unsigned IPA
+packaging succeeded. Device execution is still pending.
