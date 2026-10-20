@@ -37,7 +37,9 @@ extern int __ulock_wake(uint32_t operation, void *addr, uint64_t wake_value);
 
 #endif
 
+#if !TARGET_OS_IPHONE
 static int os_sync = -1;   /* 1: os_sync_*, 0: __ulock_* */
+#endif
 
 static int use_os_sync(void) {
 #if TARGET_OS_IPHONE

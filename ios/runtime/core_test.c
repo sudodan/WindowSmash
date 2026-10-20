@@ -36,7 +36,9 @@ int ws_runtime_test(char *report, size_t capacity) {
             memset(p, 0x11, 0x1000); memset(p+0x1000, 0x22, 0x1000);
             memset(p+0x2000, 0x33, 0x2000);
             CHECK(VirtualFree(p+0x1000, 0x1000, MEM_DECOMMIT));
-            CHECK(VirtualAlloc(p+0x1000, 0x1000, MEM_COMMIT, PAGE_READWRITE) == p+0x1000);
+            void *recommitted = VirtualAlloc(p+0x1000, 0x1000, MEM_COMMIT, PAGE_READWRITE);
+            CHECK(recommitted == p+0x1000);
+            if (!recommitted) goto release_memory;
             int zero = 1, neighbors = 1;
             for (size_t i=0; i<0x1000; ++i) {
                 if (p[0x1000+i]) zero=0;
@@ -48,10 +50,13 @@ int ws_runtime_test(char *report, size_t capacity) {
             Cpu c = {0}; c.x[0] = (u64)(uintptr_t)p - RT_MEMBASE; c.x[1]=7;
             st64(c.x[0], 35); synthetic_guest(&c); CHECK(c.x[0] == 42);
             CHECK(VirtualFree(p, 0x4000, MEM_DECOMMIT));
-            CHECK(VirtualAlloc(p, 0x4000, MEM_COMMIT, PAGE_READWRITE) == p);
+            recommitted = VirtualAlloc(p, 0x4000, MEM_COMMIT, PAGE_READWRITE);
+            CHECK(recommitted == p);
+            if (!recommitted) goto release_memory;
             int allzero=1; for(size_t i=0;i<0x4000;++i) if(p[i]) allzero=0;
             CHECK(allzero);
         }
+release_memory:
         CHECK(VirtualFree(p, 0, MEM_RELEASE));
     }
     root_fiber = ConvertThreadToFiberEx(NULL, FIBER_FLAG_FLOAT_SWITCH);

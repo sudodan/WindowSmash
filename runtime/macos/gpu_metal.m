@@ -4671,7 +4671,9 @@ static WINDOWS_BOOL CALLBACK init(PINIT_ONCE o, PVOID p, PVOID *c) {
         }
         if (!layer) fprintf(stderr, "[gfx] no window to draw into: frames are drawn but not shown\n");
         queue = [dev newCommandQueueWithMaxCommandBufferCount:64];
-        if (@available(macOS 13.3, iOS 16.4, *)) dev.shouldMaximizeConcurrentCompilation = YES;   /* (the compiler threads' compiles, side by side) */
+        #if !TARGET_OS_IPHONE
+        if (@available(macOS 13.3, *)) dev.shouldMaximizeConcurrentCompilation = YES;   /* (the compiler threads' compiles, side by side) */
+        #endif
         NSError *err = nil;
         builtin = [dev newLibraryWithSource:@(BUILTIN_MSL) options:msl_options() error:&err];
         if (!builtin) {
@@ -4692,6 +4694,7 @@ static WINDOWS_BOOL CALLBACK init(PINIT_ONCE o, PVOID p, PVOID *c) {
         if (scale == 0) {
             scale = 1;
             CGSize size = layer ? layer.drawableSize : CGSizeZero;
+            #if !TARGET_OS_IPHONE
             if (layer && display_window_mode() != DISPLAY_WINDOWED) {
                 CGDisplayModeRef mode = CGDisplayCopyDisplayMode(CGMainDisplayID());
                 if (mode) {
@@ -4699,6 +4702,7 @@ static WINDOWS_BOOL CALLBACK init(PINIT_ONCE o, PVOID p, PVOID *c) {
                     CGDisplayModeRelease(mode);
                 }
             }
+            #endif
             if (size.width >= 1 && size.height >= 1) {
                 unsigned fx, fy, fw, fh;
                 display_fit((unsigned)size.width, (unsigned)size.height, &fx, &fy, &fw, &fh);
