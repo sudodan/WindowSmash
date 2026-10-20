@@ -78,6 +78,38 @@ Metal device/queue is explicitly BLOCKED (CLI exit 77), not a pass. CI records
 that condition and continues the SDK build; other nonzero returns fail CI.
 The first hardware run may expose shader or texture-format compatibility issues.
 
+## Actual renderer diagnostic
+
+`WindowSmashRenderer` is a separate app, with bundle identifier
+`org.windowsmash.renderer-test`. It links the actual `gpu_metal.m` renderer,
+`gpu_shader.c` translator, `gpu_texture.c` texture decoder and Apple memory/thread
+backend. Its fixture reuses selected tests from `tools/mac/gfxtest.m`:
+
+- Color/depth clears; triangles, indices, points, depth and stencil.
+- Textures and CPU texture updates, render targets used as textures.
+- GPU constant updates, render state, dual-source blending and scaled blits.
+- Compute outputs, GPU-resident data, drawing from compute results and copying
+  results back to guest memory.
+
+Each workload reads back pixels or data and checks expected values. This is an
+integration of the renderer with synthetic GPU register state; it does not run
+the game, its command processor, or its services. The suite excludes presentation,
+overlay, screenshots, cache persistence checks and the upstream 1.5 GB upload
+stress test. Display/input/network/profile functions are fixture implementations;
+the overlay callback is a no-op and is not tested.
+
+The app owns its guest-memory map, fault handler and renderer for its lifetime.
+It reserves the upstream address layout, commits 64 MiB for synthetic guest data
+and allocates additional renderer/GPU resources. Run once per launch. It uses an
+absolute cache path under the app sandbox, with no working-directory change.
+A missing Metal device or failed memory reservation reports BLOCKED; unexpected
+renderer fatal errors may still close the diagnostic app.
+
+Install the `ios-renderer-unsigned` artifact separately after signing. Open
+**Smash Renderer**, tap **Run renderer**, keep it in the foreground until it
+finishes, then share the report. The earlier **Smash Runtime** app remains useful
+for independent shader checks when the guest memory layout is unavailable.
+
 ## Build and run
 
 The `iOS Apple runtime integration` workflow first executes the core tests on a

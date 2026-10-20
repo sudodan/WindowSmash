@@ -60,7 +60,7 @@ jobs:
           for SRC in runtime/macos/gpu_metal.m ios/runtime/renderer_test.m; do
             clang $FLAGS -fobjc-arc -DWS_RENDERER_CLI -c "$SRC" -o "build/renderer/$(basename "$SRC").o"
           done
-          clang -arch arm64 build/renderer/*.o -framework Metal -framework QuartzCore -framework Foundation -o build/renderer/renderer-test
+          clang -arch arm64 build/renderer/*.o -framework Metal -framework QuartzCore -framework CoreGraphics -framework Foundation -o build/renderer/renderer-test
           set +e
           build/renderer/renderer-test "$PWD/build/renderer/modules" > build/renderer/report.txt 2>&1
           RESULT=$?

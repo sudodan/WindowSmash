@@ -44,7 +44,7 @@ endforeach()
 # Separate address space from the loader/kernel fixture: both own the guest alias map.
 add_executable(WindowSmashRenderer MACOSX_BUNDLE renderer_main.m renderer_test.m
   ${RT}/macos/gpu_metal.m ${RT}/gpu_shader.c ${RT}/gpu_texture.c)
-target_link_libraries(WindowSmashRenderer PRIVATE RuntimeCore "-framework UIKit" "-framework Metal" "-framework QuartzCore")
+target_link_libraries(WindowSmashRenderer PRIVATE RuntimeCore "-framework UIKit" "-framework Metal" "-framework QuartzCore" "-framework CoreGraphics")
 target_compile_options(WindowSmashRenderer PRIVATE -fno-strict-aliasing -ffp-contract=off
   -Werror=unguarded-availability-new "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 set_target_properties(WindowSmashRenderer PROPERTIES
