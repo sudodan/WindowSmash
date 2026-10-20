@@ -772,7 +772,13 @@ static u64 resolve(const char *name, int weak) {
 }
 
 /* ---- loading --------------------------------------------------------------------- */
+#ifdef WS_EMBEDDED_HOST
+int rt_embedded_boot(const char *dir);
+#define RT_PROCESS_ENTRY rt_embedded_boot
+#else
 int main(int argc, char **argv);
+#define RT_PROCESS_ENTRY main
+#endif
 static DWORD WINAPI guest_main(LPVOID unused);
 static u32 by_host_cap;
 
@@ -875,7 +881,7 @@ static void load(const char *dir) {
             fprintf(stderr, "[ro] warning: cannot reserve %s's range at %#llx (error %lu)\n", nro->name, nro->base, (unsigned long)GetLastError());
     }
     GuestFn *own[] = {(GuestFn *)rt_call, (GuestFn *)rt_lookup, (GuestFn *)rt_backtrace, (GuestFn *)rt_fatal,
-                      (GuestFn *)rt_trap, (GuestFn *)rt_svc, (GuestFn *)load, (GuestFn *)main, (GuestFn *)guest_main,
+                      (GuestFn *)rt_trap, (GuestFn *)rt_svc, (GuestFn *)load, (GuestFn *)RT_PROCESS_ENTRY, (GuestFn *)guest_main,
                       wrap_startup, wrap_main, unresolved};
     for (u32 i = 0; i < sizeof own / sizeof *own; i++) by_host[by_host_count++] = (struct HostFn){(u64)own[i], 0};
     qsort(by_host, by_host_count, sizeof *by_host, by_host_cmp);
@@ -961,6 +967,26 @@ static DWORD WINAPI guest_main(LPVOID unused) {
     return 0;
 }
 
+#ifdef WS_EMBEDDED_HOST
+/* Single-shot synchronous startup for an app-owned worker thread. UIKit keeps
+ * its main loop. No Finder setup, chdir, window loop, or process-main override.
+ * The guest must return from Start; process exit/teardown is not adapted here. */
+int rt_embedded_boot(const char *dir) {
+    static int attempted;
+    if (!dir || !*dir) return 3;
+    if (__atomic_exchange_n(&attempted, 1, __ATOMIC_ACQ_REL)) return 2;
+#ifdef __APPLE__
+    if (!rt_guest_window()) return 1;
+#endif
+    rt_data_dir = strdup(dir); /* Runtime retains this path for module/NRO loads. */
+    if (!rt_data_dir) return 4;
+    install_signals();
+    kernel_init();
+    load(rt_data_dir);
+    guest_main(NULL);
+    return 0;
+}
+#else
 static void print_status(void) {
     fprintf(stderr, "\n[status] %.0f s into %s; GPU: %llu submissions, %llu command lists, %llu draws, %llu clears, %llu compute launches (%llu run, %llu GPU-resident buffers made, %llu given up); %llu frames presented\n",
             (double)rt_now_ns() / 1e9, phase, gpu_stat_batches, gpu_stat_lists, gpu_stat_draws, gfx_stat_clears, gpu_stat_dispatches,
@@ -1146,3 +1172,5 @@ int main(int argc, char **argv) {
 #endif
     return 0;
 }
+
+#endif /* WS_EMBEDDED_HOST: desktop process startup */

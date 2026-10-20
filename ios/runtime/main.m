@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 #import "ios/window.h"
 #include "core_test.h"
+#include "boot_test.h"
 @interface RuntimeController : UIViewController
 @property(nonatomic, strong) UITextView *text;
 @property(nonatomic, strong) UIBarButtonItem *memoryButton;
@@ -17,23 +18,26 @@
     self.text.font=[UIFont monospacedSystemFontOfSize:13 weight:UIFontWeightRegular];
     self.text.editable=NO; self.text.text=@"Testing upstream runtime core…";
     [self.view addSubview:self.text];
-    self.memoryButton=[[UIBarButtonItem alloc] initWithTitle:@"Test address layout" style:UIBarButtonItemStylePlain target:self action:@selector(testLayout)];
+    self.memoryButton=[[UIBarButtonItem alloc] initWithTitle:@"Boot synthetic guest" style:UIBarButtonItemStylePlain target:self action:@selector(testLayout)];
     self.memoryButton.enabled=NO;
     self.navigationItem.rightBarButtonItem=self.memoryButton;
     self.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAction target:self action:@selector(share)];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0), ^{
         char report[4096]={0}; int result=ws_runtime_test(report,sizeof report);
-        NSString *text=[NSString stringWithFormat:@"Apple runtime integration v0.1\nOS: %@\n\n%s\nCore status: %@\n\nLarge guest address layout: NOT TESTED. Tap Test address layout to try the upstream reservation. Success is not a game boot.\n\nGraphics source compiles separately; this app does not run the game renderer. No game files included.\n",NSProcessInfo.processInfo.operatingSystemVersionString,report,result?@"FAIL":@"PASS"];
+        NSString *text=[NSString stringWithFormat:@"Apple runtime integration v0.2\nOS: %@\n\n%s\nCore status: %@\n\nSynthetic guest boot: NOT TESTED. Tap Boot synthetic guest to reserve the upstream address layout and run the loader/kernel fixture.\n\nGraphics source compiles separately; this app does not run the game renderer. No game files included.\n",NSProcessInfo.processInfo.operatingSystemVersionString,report,result?@"FAIL":@"PASS"];
         dispatch_async(dispatch_get_main_queue(), ^{self.text.text=text; self.memoryButton.enabled=YES;});
     });
 }
 - (void)testLayout {
     self.memoryButton.enabled=NO;
-    self.text.text=[self.text.text stringByAppendingString:@"\nAttempting 512 GiB virtual guest window at 1 TiB (not physical RAM allocation)…\n"];
+    self.text.text=[self.text.text stringByAppendingString:@"\nStarting synthetic boot: 512 GiB virtual guest window at 1 TiB, real loader/kernel, synthetic module images…\n"];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0), ^{
-        int result=rt_guest_window();
+        NSString *path=[NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"boot-fixtures"];
+        char report[8192]={0};
+        int result=ws_boot_test(path.fileSystemRepresentation,report,sizeof report);
+        NSString *message=[NSString stringWithFormat:@"%s\nSynthetic boot status: %@\n",report,result?@"FAILED/BLOCKED":@"PASS"];
         dispatch_async(dispatch_get_main_queue(), ^{
-            self.text.text=[self.text.text stringByAppendingFormat:@"Guest window reservation: %@. No full game memory commitment tested.\n",result?@"PASS":@"FAIL"];
+            self.text.text=[self.text.text stringByAppendingString:message];
         });
     });
 }

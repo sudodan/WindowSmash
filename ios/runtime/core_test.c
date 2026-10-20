@@ -86,7 +86,7 @@ release_memory:
     CHECK(ws_exception_test());
     if (used < capacity) snprintf(report+used, capacity-used,
         "Runtime core: %d/%d checks passed.\nSynthetic guest arithmetic, 4 KB subpages, 1000 fiber switches, event/thread waits, C++ exception bridge.\n"
-        "NOT full guest boot; renderer/loader/kernel are not linked into this test.\n", checks-failures, checks);
+        "These core checks do not exercise the loader/kernel. Synthetic boot is a separate test.\n", checks-failures, checks);
     return failures ? 1 : 0;
 #undef CHECK
 }

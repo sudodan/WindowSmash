@@ -24,6 +24,16 @@ jobs:
           done
           clang++ -arch arm64 build/core/*.o -o build/core/runtime-test
           build/core/runtime-test
+      - name: Boot synthetic modules through real loader and kernel on Mac
+        run: |
+          mkdir -p build/boot
+          python3 ios/runtime/generate_boot_images.py build/boot/images
+          FLAGS="-arch arm64 -mmacosx-version-min=14.4 -O2 -fno-strict-aliasing -ffp-contract=off -Iruntime/macos/include -Iruntime/linux/include -Iruntime -Iios/runtime -DWS_EMBEDDED_HOST -DWS_BOOT_CLI"
+          for SRC in runtime/linux/win32.c runtime/macos/memory.c runtime/macos/platform.c runtime/macos/fiber.c runtime/macos/fiber_arm64.S runtime/host.c runtime/kernel.c ios/runtime/boot_test.c ios/runtime/boot_services.c; do
+            clang $FLAGS -c "$SRC" -o "build/boot/$(basename "$SRC").o"
+          done
+          clang -arch arm64 build/boot/*.o -o build/boot/boot-test
+          build/boot/boot-test "$PWD/build/boot/images"
       - name: Configure iPhone app and runtime compile audit
         run: cmake -S ios/runtime -B build/ios-runtime -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=18.0
       - name: Compile and link unsigned iPhone app
@@ -37,6 +47,9 @@ jobs:
             exit 1
           fi
           plutil -lint "$APP/Info.plist"
+          for MODULE in main subsdk0 sdk; do
+            test -f "$APP/boot-fixtures/$MODULE.reloc.bin"
+          done
           mkdir -p build/package/Payload
           ditto "$APP" build/package/Payload/WindowSmashRuntime.app
           cd build/package

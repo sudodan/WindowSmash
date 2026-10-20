@@ -74,3 +74,10 @@ void ipc_close(void *session);
 void kernel_signal_event(u32 handle);
 /* Point a guest nn::os::SystemEventType at a new kernel event; returns the event's handle. */
 u32 rt_attach_system_event(Cpu *c, u64 system_event, int auto_clear);
+
+#ifdef WS_EMBEDDED_HOST
+/* Call once on a dedicated worker with sufficient stack, never UIKit's thread.
+ * 0: guest Start returned; 1: guest window unavailable; 2: already attempted;
+ * 3: invalid directory; 4: allocation failure. Fatal loader faults still abort. */
+int rt_embedded_boot(const char *dir);
+#endif
