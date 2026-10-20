@@ -4,6 +4,8 @@
 _Static_assert(sizeof(vm_address_t) == 8, "Probe requires 64-bit VM addresses");
 _Static_assert(sizeof(vm_size_t) == 8, "Probe requires 64-bit VM sizes");
 #include "cpu_probe.h"
+#include "recompiled_probe.h"
+#import "metal_probe.h"
 
 static NSString *memoryProbe(void) {
     /* Snapshot of host.h/recomp.py at bbef886. Module/shared sizes below are
@@ -67,13 +69,16 @@ static NSString *memoryProbe(void) {
     [self.view addSubview:self.text];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAction target:self action:@selector(share)];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        char cpu[1024]; ws_cpu_probe(cpu, sizeof cpu);
+        char cpu[1024], recompiled[1024];
+        ws_cpu_probe(cpu, sizeof cpu);
+        ws_recompiled_probe(recompiled, sizeof recompiled);
         NSMutableString *report = [NSMutableString stringWithFormat:
-            @"WindowSmash feasibility probe v1\nUpstream: bbef8862046fd98721924338f1b79f65b65ee698\nOS: %@\nArchitecture: arm64 device required\n\n%s\n%@\n",
-            NSProcessInfo.processInfo.operatingSystemVersionString, cpu, memoryProbe()];
-        id<MTLDevice> device = MTLCreateSystemDefaultDevice();
-        [report appendFormat:@"Metal device: %@\n", device.name ?: @"UNAVAILABLE"];
-        [report appendString:@"NOT TESTED: game execution, translated shaders, GPU output, fibers, guest exceptions, sustained performance.\nA passing probe is NOT a working port.\n"];
+            @"WindowSmash feasibility probe v2\nUpstream: bbef8862046fd98721924338f1b79f65b65ee698\nOS: %@\nArchitecture: arm64 device required\n\n%s\n%s\n%@\n",
+            NSProcessInfo.processInfo.operatingSystemVersionString, cpu, recompiled, memoryProbe()];
+        NSString *metal = nil;
+        ws_metal_probe(&metal);
+        [report appendString:metal];
+        [report appendString:@"NOT TESTED: game execution, translated game shaders, game rendering, fibers, guest exceptions, sustained performance.\nA passing probe is NOT a working port.\n"];
         dispatch_async(dispatch_get_main_queue(), ^{ self.text.text = report; });
     });
 }

@@ -1,9 +1,18 @@
 cmake_minimum_required(VERSION 3.24)
-project(WindowSmashProbe LANGUAGES C OBJC)
+project(WindowSmashProbe LANGUAGES C OBJC ASM)
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   message(FATAL_ERROR "Configure with -DCMAKE_SYSTEM_NAME=iOS on a Mac with Xcode.")
 endif()
-add_executable(WindowSmashProbe MACOSX_BUNDLE main.m cpu_probe.c)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
+add_custom_command(
+  OUTPUT "${FIXTURE_DIR}/fixtures.c" "${FIXTURE_DIR}/native_fixtures.S"
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/generate_fixtures.py" "${FIXTURE_DIR}"
+  DEPENDS generate_fixtures.py ../../tools/lift.py ../../tools/lift_simd.py ../../tools/a64.py
+  VERBATIM)
+add_executable(WindowSmashProbe MACOSX_BUNDLE main.m cpu_probe.c recompiled_probe.c metal_probe.m
+  "${FIXTURE_DIR}/fixtures.c" "${FIXTURE_DIR}/native_fixtures.S")
+target_compile_definitions(WindowSmashProbe PRIVATE WS_NATIVE_REFERENCE)
 target_include_directories(WindowSmashProbe PRIVATE ../../runtime)
 target_compile_options(WindowSmashProbe PRIVATE -fno-fast-math -ffp-contract=off "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 target_link_libraries(WindowSmashProbe PRIVATE "-framework UIKit" "-framework Metal")

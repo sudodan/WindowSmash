@@ -1,4 +1,4 @@
-# iPhone feasibility probe — first milestone
+# iPhone feasibility probe — CPU translation and Metal milestones
 
 Target: iPhone 16 Pro Max, iOS 26, unmodified device.
 Upstream inspected: bbef8862046fd98721924338f1b79f65b65ee698.
@@ -11,7 +11,8 @@ This is a diagnostic app, NOT a Smash port. It contains no game data or generate
 - CPU tests exercise the actual upstream `runtime/recomp.h`: layout, unaligned loads/stores, division edge cases, multiplication, rotate, half precision, signed zero/NaN, vector clearing, and concurrent compare-and-swap.
 - An iOS UIKit app runs those checks and attempts simultaneous fixed-address reservations for the runtime's heap, alias, stack, thread-local and native regions. Module and shared-region checks use one page only; actual module sizes require game inputs.
 - Successful reservations are protected inaccessible, then their first page is made writable and tested. Only those pages are touched, not tens of GiB of physical memory. Fixed allocation does NOT use the overwrite flag. Allocations are released after the probe.
-- The report identifies the Metal device, but does NOT test shaders or rendering.
+- Version 2 compiles a synthetic Metal compute shader at runtime, dispatches it, and checks 257 results plus 63 guard values. This exercises MSL compilation and GPU readback, not Maxwell translation or game rendering.
+- Version 2 sends six original instruction fixtures through upstream `tools/lift.py` at build time. It compares generated C with high-level expectations and, on Apple ARM64, directly executed copies of the same instruction words. It covers add, multiply, a conditional loop, loads/stores, floating-point add and SIMD add. Generated fixtures contain no game code.
 - The Share button exports the report.
 - An opt-in entitlement supports a later comparison with Extended Virtual Addressing. A compatible provisioning profile is necessary; merely adding the file cannot grant the entitlement.
 
@@ -48,13 +49,13 @@ Test the baseline first. For a separate extended-addressing build, configure wit
 3. If the app closes, preserve the device crash/termination report; an interrupted run is not a pass.
 4. Do not substitute a Simulator result for device behavior.
 
-A successful report only supports continuing the investigation. It does not validate full module mappings, physical RAM budget, write tracking, fibers, guest exceptions, actual recompiler output, translated shaders, or sustained gameplay.
+A successful report only supports continuing the investigation. It does not validate full module mappings, physical RAM budget, write tracking, fibers, guest exceptions, full-game recompiler coverage, translated game shaders, or sustained gameplay.
 
 ## Next gates
 
 1. Compile this app for iOS ARM64, sign and execute it on the target phone.
 2. If fixed mappings fail, evaluate relocation or explicit guest-to-host memory translation before renderer work.
-3. Exercise actual synthetic instruction sequences through the recompiler and test guest exception/fiber behavior.
+3. Extend the synthetic instruction checks to guest exception/fiber behavior.
 4. Translate a representative game shader and validate output through Metal using locally supplied game inputs.
 5. Only then attempt full game startup and measure memory/thermal/performance behavior.
 
@@ -71,3 +72,7 @@ cc -std=c11 -O2 -Wall -Wextra -fno-fast-math -ffp-contract=off \
 After the workflow succeeds, download its `ios-probe-unsigned` artifact and extract `WindowSmashProbe-unsigned.ipa`. It must still be signed. Sideloadly (https://sideloadly.io/) documents Windows installation with a free or paid Apple account and iOS 26 support. Enter credentials only in your local signing tool, never in this repository or chat. Follow its current Windows dependency instructions. Free-account apps require periodic re-signing. This baseline build does not request extended addressing; do not interpret a failure as a test of that entitlement.
 
 After local signing/installation, enable Developer Mode if prompted (Settings > Privacy & Security > Developer Mode, restart and confirm). Open Smash Probe and use its Share button to return the full report. If installation fails, preserve the exact error; if the app terminates, return the crash log rather than treating it as a passing run.
+
+## Version 2 validation pending Apple build
+
+Linux generated-code checks: 9,216 passed, also with AddressSanitizer and UndefinedBehaviorSanitizer (leak detection disabled for this environment). Native ARM64 comparisons and Metal execution are checked by the next macOS workflow. If a hosted runner exposes no GPU, the Metal test explicitly reports NOT RUN rather than a pass. Physical iPhone memory behavior remains unverified.

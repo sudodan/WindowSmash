@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [ios/feasibility-probe]
-    paths: ["ios/probe/**", ".github/workflows/ios-probe.yml", "runtime/recomp.h"]
+    paths: ["ios/probe/**", ".github/workflows/ios-probe.yml", "runtime/recomp.h", "tools/lift.py", "tools/lift_simd.py", "tools/a64.py"]
 permissions:
   contents: read
 jobs:
@@ -16,6 +16,16 @@ jobs:
         run: |
           clang -std=c11 -O2 -fno-fast-math -ffp-contract=off -DWS_PROBE_CLI -Iruntime ios/probe/cpu_probe.c -o /tmp/ws-cpu-probe
           /tmp/ws-cpu-probe
+      - name: Generate and compare recompiled code to native ARM64
+        run: |
+          test "$(uname -m)" = arm64
+          python3 ios/probe/generate_fixtures.py build/fixtures
+          clang -std=c11 -O2 -fno-fast-math -ffp-contract=off -DWS_RECOMPILED_CLI -DWS_NATIVE_REFERENCE -Iruntime -Iios/probe ios/probe/recompiled_probe.c build/fixtures/fixtures.c build/fixtures/native_fixtures.S -o /tmp/ws-recompiled
+          /tmp/ws-recompiled
+      - name: Test Metal compute when runner exposes a GPU
+        run: |
+          clang -fobjc-arc -DWS_METAL_CLI ios/probe/metal_probe.m -framework Foundation -framework Metal -o /tmp/ws-metal
+          /tmp/ws-metal
       - name: Configure iOS ARM64 project
         run: cmake -S ios/probe -B build/ios-probe -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0
       - name: Compile unsigned device app
