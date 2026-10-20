@@ -886,8 +886,8 @@ def in_use(path):
 
 
 def build(a):
-    log("[1/9] Check the tools")
-    compiler = check_tools()   # (a CompilerDownload when there is no compiler yet: it downloads during steps 3-8)
+    log("[1/9] Data-only preparation: skip desktop compiler" if getattr(a, "data_only", False) else "[1/9] Check the tools")
+    compiler = None if getattr(a, "data_only", False) else check_tools()   # (a CompilerDownload when there is no compiler yet: it downloads during steps 3-8)
 
     log("\n[2/9] Install the Python packages")
     install_packages()
@@ -982,8 +982,8 @@ def build(a):
     log(f"\n[9/9] Build the game ({exe})")
     if compiler:
         compiler.finish()
-    if a.prepare_only:
-        log("  not now (--prepare-only): everything the build needs is ready")
+    if a.prepare_only or getattr(a, "data_only", False):
+        log("  data preparation complete; native compilation was not requested")
         return
     if build_is_current():
         log(f"  {exe} is newer than everything it is built from: nothing to do (delete it to build again)")
@@ -1067,6 +1067,7 @@ def main():
     ap.add_argument("--firmware", help=f"the folder with the firmware's .nca files (asked; default {FOLDERS['firmware'][1]})")
     ap.add_argument("--jobs", type=int, help="how many files to compile at a time (default: by the RAM)")
     ap.add_argument("--check", action="store_true", help="only check the tools (step 1) and stop")
+    ap.add_argument("--data-only", action="store_true", help="prepare real game data without checking/downloading a desktop compiler; implies --prepare-only")
     ap.add_argument("--prepare-only", action="store_true", help="do every step but the build itself (9)")
     ap.add_argument("--check-ready", action="store_true",
                     help="only say (exit status 0) whether steps 3 to 8 are done, so that no game files are needed")
