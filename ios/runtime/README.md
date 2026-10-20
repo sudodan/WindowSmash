@@ -75,3 +75,23 @@ game boot or performance on the user's phone is assumed.
 - Offscreen upstream shader/renderer tests and device capability/readback checks.
 - iOS SDL/codecs, input/audio interruptions, sandboxed game-data/save/cache paths.
 - Private game code generation, signing, startup and memory/performance testing.
+
+## Validation — 2026-10-20
+
+Successful run: https://github.com/sudodan/WindowSmash/actions/runs/39490837684
+Build commit: `b4c526783f356fb6fd31088b941cde9d1640f75d`.
+
+- Mac ARM64 execution: 20/20 runtime-core checks passed.
+- Xcode 16.4 / iPhoneOS 18.5 SDK: runtime-core app compiled and linked for arm64
+  with deployment target iOS 18.0.
+- Required object target compiled the actual loader, kernel, shader translator
+  and adapted Metal renderer for iOS. These four objects are not linked into
+  the diagnostic executable.
+- Binary architecture, Info.plist and absence of private ulock imports passed.
+- Unsigned IPA and checksum packaged in artifact `ios-runtime-unsigned`.
+
+The first integration build passed all core checks but found further desktop-only
+Metal compilation/display APIs. The second build guards those APIs on Mac and
+uses the UIKit layer's drawable dimensions on iOS, then passed all build stages.
+There has been no iPhone execution, full synthetic module boot, renderer execution,
+original game startup, or game performance measurement for this branch.
