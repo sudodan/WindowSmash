@@ -50,10 +50,52 @@ jobs:
           elif [ "$RESULT" -ne 0 ]; then
             exit "$RESULT"
           fi
+      - name: Run actual offscreen Metal renderer comparisons
+        run: |
+          mkdir -p build/renderer/modules
+          FLAGS="-arch arm64 -mmacosx-version-min=14.4 -O1 -fno-strict-aliasing -ffp-contract=off -Iruntime/macos/include -Iruntime/linux/include -Iruntime -Iios/runtime"
+          for SRC in runtime/linux/win32.c runtime/macos/memory.c runtime/macos/platform.c runtime/macos/fiber.c runtime/macos/fiber_arm64.S runtime/gpu_shader.c runtime/gpu_texture.c; do
+            clang $FLAGS -c "$SRC" -o "build/renderer/$(basename "$SRC").o"
+          done
+          for SRC in runtime/macos/gpu_metal.m ios/runtime/renderer_test.m; do
+            clang $FLAGS -fobjc-arc -DWS_RENDERER_CLI -c "$SRC" -o "build/renderer/$(basename "$SRC").o"
+          done
+          clang -arch arm64 build/renderer/*.o -framework Metal -framework QuartzCore -framework Foundation -o build/renderer/renderer-test
+          set +e
+          build/renderer/renderer-test "$PWD/build/renderer/modules" > build/renderer/report.txt 2>&1
+          RESULT=$?
+          set -e
+          cat build/renderer/report.txt
+          if [ "$RESULT" -eq 77 ]; then
+            echo '::warning::Renderer blocked by runner GPU or memory layout; execution unverified.'
+          elif [ "$RESULT" -ne 0 ]; then
+            exit "$RESULT"
+          fi
       - name: Configure iPhone app and runtime compile audit
         run: cmake -S ios/runtime -B build/ios-runtime -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=18.0
       - name: Compile and link unsigned iPhone app
         run: xcodebuild -project build/ios-runtime/WindowSmashRuntime.xcodeproj -scheme WindowSmashRuntime -configuration Release -sdk iphoneos -destination "generic/platform=iOS" CODE_SIGNING_ALLOWED=NO build
+      - name: Compile and link separate iPhone renderer app
+        run: xcodebuild -project build/ios-runtime/WindowSmashRuntime.xcodeproj -scheme WindowSmashRenderer -configuration Release -sdk iphoneos -destination "generic/platform=iOS" CODE_SIGNING_ALLOWED=NO build
+      - name: Package renderer IPA
+        run: |
+          APP=build/ios-runtime/Release-iphoneos/WindowSmashRenderer.app
+          xcrun lipo "$APP/WindowSmashRenderer" -verify_arch arm64
+          if nm -u "$APP/WindowSmashRenderer" | grep -E '__ulock_(wait|wake)'; then exit 1; fi
+          plutil -lint "$APP/Info.plist"
+          mkdir -p build/renderer-package/Payload
+          ditto "$APP" build/renderer-package/Payload/WindowSmashRenderer.app
+          cd build/renderer-package
+          ditto -c -k --keepParent Payload WindowSmashRenderer-unsigned.ipa
+          shasum -a 256 WindowSmashRenderer-unsigned.ipa > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-renderer-unsigned
+          path: |
+            build/renderer-package/WindowSmashRenderer-unsigned.ipa
+            build/renderer-package/SHA256SUMS.txt
+            build/renderer/report.txt
+          if-no-files-found: error
       - name: Reject private wait APIs and package IPA
         run: |
           APP=build/ios-runtime/Release-iphoneos/WindowSmashRuntime.app
