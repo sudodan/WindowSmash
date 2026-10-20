@@ -19,10 +19,23 @@ jobs:
       - name: Configure iOS ARM64 project
         run: cmake -S ios/probe -B build/ios-probe -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0
       - name: Compile unsigned device app
-        run: xcodebuild -project build/ios-probe/WindowSmashProbe.xcodeproj -scheme WindowSmashProbe -configuration Release -sdk iphoneos -derivedDataPath build/derived CODE_SIGNING_ALLOWED=NO build
-      - name: Preserve unsigned build for inspection (not installable as-is)
+        run: xcodebuild -project build/ios-probe/WindowSmashProbe.xcodeproj -scheme WindowSmashProbe -configuration Release -sdk iphoneos -destination "generic/platform=iOS" -derivedDataPath build/derived CODE_SIGNING_ALLOWED=NO build
+      - name: Verify and package unsigned IPA for local signing
+        run: |
+          APP=build/ios-probe/Release-iphoneos/WindowSmashProbe.app
+          test -x "$APP/WindowSmashProbe"
+          xcrun lipo -verify_arch arm64 "$APP/WindowSmashProbe"
+          plutil -lint "$APP/Info.plist"
+          mkdir -p build/package/Payload
+          ditto "$APP" build/package/Payload/WindowSmashProbe.app
+          cd build/package
+          ditto -c -k --keepParent Payload WindowSmashProbe-unsigned.ipa
+          shasum -a 256 WindowSmashProbe-unsigned.ipa > SHA256SUMS.txt
+      - name: Preserve unsigned IPA (requires signing before installation)
         uses: actions/upload-artifact@v4
         with:
           name: ios-probe-unsigned
-          path: build/derived/Build/Products/Release-iphoneos/WindowSmashProbe.app
+          path: |
+            build/package/WindowSmashProbe-unsigned.ipa
+            build/package/SHA256SUMS.txt
           if-no-files-found: error

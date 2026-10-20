@@ -20,7 +20,7 @@ The memory constants are a snapshot of host.h and tools/recomp.py at the commit 
 ## Current validation
 
 Linux x86-64 GCC: 18/18 CPU helper checks passed, including 20,000 atomic increments. AddressSanitizer and UndefinedBehaviorSanitizer also passed with leak detection disabled (LeakSanitizer cannot inspect processes in this environment). Both plist files parsed successfully.
-No Apple compiler, Apple SDK, signing identity, or physical device was available in the authoring environment. The Objective-C app and CMake/Xcode workflow have NOT been compiled or run on Apple hardware. No ARM64 success is claimed.
+The first GitHub Actions run passed all 18 CPU checks on a macOS ARM64 runner using Apple Clang. Its iOS app compile exposed an unsupported mach_vm.h include; the probe now uses the iOS SDK vm_* interfaces with compile-time 64-bit size checks. A new build is required to validate that correction. No iPhone execution is claimed.
 
 ## Build on macOS / hosted runner
 
@@ -35,7 +35,7 @@ xcodebuild -project build/ios-probe/WindowSmashProbe.xcodeproj \
   -derivedDataPath build/derived CODE_SIGNING_ALLOWED=NO build
 ```
 
-The manual GitHub Actions workflow `.github/workflows/ios-probe.yml` performs this unsigned compile check. It has not been uploaded or run. A macOS runner may consume account minutes; check the account's available allocation before dispatching.
+The manual GitHub Actions workflow `.github/workflows/ios-probe.yml` performs this unsigned compile check. It is published on the ios/feasibility-probe branch of sudodan/WindowSmash and runs on pushes to that branch. A macOS runner may consume account minutes; check the account's available allocation before dispatching.
 
 An unsigned app cannot run on the phone. For a signed build, open the generated Xcode project on a Mac, select your developer team, set a unique bundle identifier, and configure device provisioning. A hosted Mac can compile/sign, but device installation and provisioning must still be arranged. Do not put certificates, passwords or private keys into the repository.
 
@@ -65,3 +65,7 @@ cc -std=c11 -O2 -Wall -Wextra -fno-fast-math -ffp-contract=off \
   -DWS_PROBE_CLI -Iruntime ios/probe/cpu_probe.c -pthread -lm -o /tmp/ws-cpu-probe
 /tmp/ws-cpu-probe
 ```
+
+## Windows installation route
+
+After the workflow succeeds, download its `ios-probe-unsigned` artifact and extract `WindowSmashProbe-unsigned.ipa`. It must still be signed. Sideloadly (https://sideloadly.io/) documents Windows installation with a free or paid Apple account and iOS 26 support. Enter credentials only in your local signing tool, never in this repository or chat. Follow its current Windows dependency instructions. Free-account apps require periodic re-signing. This baseline build does not request extended addressing; do not interpret a failure as a test of that entitlement.

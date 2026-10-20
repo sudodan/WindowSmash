@@ -1,7 +1,8 @@
 #import <UIKit/UIKit.h>
 #import <Metal/Metal.h>
 #import <mach/mach.h>
-#import <mach/mach_vm.h>
+_Static_assert(sizeof(vm_address_t) == 8, "Probe requires 64-bit VM addresses");
+_Static_assert(sizeof(vm_size_t) == 8, "Probe requires 64-bit VM sizes");
 #include "cpu_probe.h"
 
 static NSString *memoryProbe(void) {
@@ -19,24 +20,24 @@ static NSString *memoryProbe(void) {
         {"shared sample", 0x7800000000, 0}
     };
     NSMutableString *log = [NSMutableString stringWithString:@"Memory reservations (held simultaneously):\n"];
-    mach_vm_address_t owned[9] = {0};
-    mach_vm_size_t sizes[9] = {0};
+    vm_address_t owned[9] = {0};
+    vm_size_t sizes[9] = {0};
     for (int i = 0; i < 9; ++i) {
-        mach_vm_address_t address = ranges[i].base;
-        mach_vm_size_t size = ranges[i].size ?: vm_page_size;
+        vm_address_t address = ranges[i].base;
+        vm_size_t size = ranges[i].size ?: vm_page_size;
         /* FIXED without OVERWRITE: never replace an existing mapping. */
-        kern_return_t kr = mach_vm_allocate(mach_task_self(), &address, size, VM_FLAGS_FIXED);
+        kern_return_t kr = vm_allocate(mach_task_self(), &address, size, VM_FLAGS_FIXED);
         if (kr != KERN_SUCCESS) {
             [log appendFormat:@"FAIL %s: %s (%d)\n", ranges[i].name, mach_error_string(kr), kr];
             continue;
         }
         owned[i] = address; sizes[i] = size;
-        kr = mach_vm_protect(mach_task_self(), address, size, FALSE, VM_PROT_NONE);
+        kr = vm_protect(mach_task_self(), address, size, FALSE, VM_PROT_NONE);
         [log appendFormat:@"%@ %s: 0x%llx, %llu MiB reserved\n",
             kr == KERN_SUCCESS ? @"PASS" : @"FAIL protection", ranges[i].name,
             (unsigned long long)address, (unsigned long long)(size >> 20)];
         if (kr == KERN_SUCCESS) {
-            kr = mach_vm_protect(mach_task_self(), address, vm_page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE);
+            kr = vm_protect(mach_task_self(), address, vm_page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE);
             if (kr == KERN_SUCCESS) {
                 volatile uint64_t *p = (volatile uint64_t *)(uintptr_t)address;
                 *p = 0x123456789abcdef0ull;
@@ -45,7 +46,7 @@ static NSString *memoryProbe(void) {
         }
     }
     for (int i = 0; i < 9; ++i) if (owned[i]) {
-        kern_return_t kr = mach_vm_deallocate(mach_task_self(), owned[i], sizes[i]);
+        kern_return_t kr = vm_deallocate(mach_task_self(), owned[i], sizes[i]);
         if (kr != KERN_SUCCESS) [log appendFormat:@"Cleanup FAIL: %s\n", mach_error_string(kr)];
     }
     [log appendString:@"Reservations are virtual, not RAM commitments. This does not measure game memory usage.\n"];
