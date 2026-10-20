@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [ios/feasibility-probe]
-    paths: ["ios/probe/**", ".github/workflows/ios-probe.yml", "runtime/recomp.h", "tools/lift.py", "tools/lift_simd.py", "tools/a64.py"]
+    paths: ["ios/probe/**", ".github/workflows/ios-probe.yml", "runtime/recomp.h", "runtime/platform/**", "tools/lift.py", "tools/lift_simd.py", "tools/a64.py"]
 permissions:
   contents: read
 jobs:
@@ -12,6 +12,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Test host memory ownership and decommit
+        run: |
+          clang -std=c11 -O2 -Wall -Wextra -Werror -DWS_VM_CLI -Iruntime ios/probe/vm_probe.c runtime/platform/vm_posix.c -o /tmp/ws-vm
+          /tmp/ws-vm
       - name: Test CPU helpers on runner (not an iPhone result)
         run: |
           clang -std=c11 -O2 -fno-fast-math -ffp-contract=off -DWS_PROBE_CLI -Iruntime ios/probe/cpu_probe.c -o /tmp/ws-cpu-probe

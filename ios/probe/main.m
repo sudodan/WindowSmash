@@ -1,8 +1,8 @@
 #import <UIKit/UIKit.h>
 #import <Metal/Metal.h>
-#import <mach/mach.h>
-_Static_assert(sizeof(vm_address_t) == 8, "Probe requires 64-bit VM addresses");
-_Static_assert(sizeof(vm_size_t) == 8, "Probe requires 64-bit VM sizes");
+#include <string.h>
+#include "platform/vm.h"
+#include "vm_probe.h"
 #include "cpu_probe.h"
 #include "recompiled_probe.h"
 #import "metal_probe.h"
@@ -22,34 +22,27 @@ static NSString *memoryProbe(void) {
         {"shared sample", 0x7800000000, 0}
     };
     NSMutableString *log = [NSMutableString stringWithString:@"Memory reservations (held simultaneously):\n"];
-    vm_address_t owned[9] = {0};
-    vm_size_t sizes[9] = {0};
+    WsVmRegion owned[9] = {0};
     for (int i = 0; i < 9; ++i) {
-        vm_address_t address = ranges[i].base;
-        vm_size_t size = ranges[i].size ?: vm_page_size;
-        /* FIXED without OVERWRITE: never replace an existing mapping. */
-        kern_return_t kr = vm_allocate(mach_task_self(), &address, size, VM_FLAGS_FIXED);
-        if (kr != KERN_SUCCESS) {
-            [log appendFormat:@"FAIL %s: %s (%d)\n", ranges[i].name, mach_error_string(kr), kr];
+        size_t size = ranges[i].size ?: ws_vm_page_size();
+        int error = ws_vm_reserve(&owned[i], ranges[i].base, size);
+        if (error) {
+            [log appendFormat:@"FAIL %s: %s (%d)\n", ranges[i].name, strerror(error), error];
             continue;
         }
-        owned[i] = address; sizes[i] = size;
-        kr = vm_protect(mach_task_self(), address, size, FALSE, VM_PROT_NONE);
-        [log appendFormat:@"%@ %s: 0x%llx, %llu MiB reserved\n",
-            kr == KERN_SUCCESS ? @"PASS" : @"FAIL protection", ranges[i].name,
-            (unsigned long long)address, (unsigned long long)(size >> 20)];
-        if (kr == KERN_SUCCESS) {
-            kr = vm_protect(mach_task_self(), address, vm_page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE);
-            if (kr == KERN_SUCCESS) {
-                volatile uint64_t *p = (volatile uint64_t *)(uintptr_t)address;
-                *p = 0x123456789abcdef0ull;
-                [log appendFormat:@"  first-page write/read: %@\n", *p == 0x123456789abcdef0ull ? @"PASS" : @"FAIL"];
-            } else [log appendFormat:@"  first-page protection FAIL: %s\n", mach_error_string(kr)];
-        }
+        [log appendFormat:@"PASS %s: 0x%llx, %llu MiB reserved inaccessible\n",
+            ranges[i].name, (unsigned long long)(uintptr_t)owned[i].base,
+            (unsigned long long)(size >> 20)];
+        error = ws_vm_protect(&owned[i], 0, ws_vm_page_size(), WS_VM_READ | WS_VM_WRITE);
+        if (!error) {
+            volatile uint64_t *p = owned[i].base;
+            *p = 0x123456789abcdef0ull;
+            [log appendFormat:@"  first-page write/read: %@\n", *p == 0x123456789abcdef0ull ? @"PASS" : @"FAIL"];
+        } else [log appendFormat:@"  first-page protection FAIL: %s\n", strerror(error)];
     }
-    for (int i = 0; i < 9; ++i) if (owned[i]) {
-        kern_return_t kr = vm_deallocate(mach_task_self(), owned[i], sizes[i]);
-        if (kr != KERN_SUCCESS) [log appendFormat:@"Cleanup FAIL: %s\n", mach_error_string(kr)];
+    for (int i = 0; i < 9; ++i) if (owned[i].base) {
+        int error = ws_vm_release(&owned[i]);
+        if (error) [log appendFormat:@"Cleanup FAIL: %s\n", strerror(error)];
     }
     [log appendString:@"Reservations are virtual, not RAM commitments. This does not measure game memory usage.\n"];
     return log;
@@ -69,12 +62,13 @@ static NSString *memoryProbe(void) {
     [self.view addSubview:self.text];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAction target:self action:@selector(share)];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        char cpu[1024], recompiled[1024];
+        char cpu[1024], recompiled[1024], vm[512];
+        ws_vm_probe(vm, sizeof vm);
         ws_cpu_probe(cpu, sizeof cpu);
         ws_recompiled_probe(recompiled, sizeof recompiled);
         NSMutableString *report = [NSMutableString stringWithFormat:
-            @"WindowSmash feasibility probe v2\nUpstream: bbef8862046fd98721924338f1b79f65b65ee698\nOS: %@\nArchitecture: arm64 device required\n\n%s\n%s\n%@\n",
-            NSProcessInfo.processInfo.operatingSystemVersionString, cpu, recompiled, memoryProbe()];
+            @"WindowSmash feasibility probe v3\nUpstream: bbef8862046fd98721924338f1b79f65b65ee698\nOS: %@\nArchitecture: arm64 device required\n\n%s\n%s\n%s\n%@\n",
+            NSProcessInfo.processInfo.operatingSystemVersionString, cpu, recompiled, vm, memoryProbe()];
         NSString *metal = nil;
         ws_metal_probe(&metal);
         [report appendString:metal];

@@ -10,7 +10,7 @@ This is a diagnostic app, NOT a Smash port. It contains no game data or generate
 
 - CPU tests exercise the actual upstream `runtime/recomp.h`: layout, unaligned loads/stores, division edge cases, multiplication, rotate, half precision, signed zero/NaN, vector clearing, and concurrent compare-and-swap.
 - An iOS UIKit app runs those checks and attempts simultaneous fixed-address reservations for the runtime's heap, alias, stack, thread-local and native regions. Module and shared-region checks use one page only; actual module sizes require game inputs.
-- Successful reservations are protected inaccessible, then their first page is made writable and tested. Only those pages are touched, not tens of GiB of physical memory. Fixed allocation does NOT use the overwrite flag. Allocations are released after the probe.
+- Successful reservations start inaccessible, then their first page is made writable and tested. Only those pages are touched, not tens of GiB of physical memory. Reservation hints never overwrite mappings; an OS-chosen address different from the requested address is released and reported as a failure. Allocations are released after the probe.
 - Version 2 compiles a synthetic Metal compute shader at runtime, dispatches it, and checks 257 results plus 63 guard values. This exercises MSL compilation and GPU readback, not Maxwell translation or game rendering.
 - Version 2 sends six original instruction fixtures through upstream `tools/lift.py` at build time. It compares generated C with high-level expectations and, on Apple ARM64, directly executed copies of the same instruction words. It covers add, multiply, a conditional loop, loads/stores, floating-point add and SIMD add. Generated fixtures contain no game code.
 - The Share button exports the report.
@@ -76,3 +76,24 @@ After local signing/installation, enable Developer Mode if prompted (Settings > 
 ## Version 2 validation — Apple build passed
 
 Linux generated-code checks: 9,216 passed, also with AddressSanitizer and UndefinedBehaviorSanitizer (leak detection disabled for this environment). GitHub Actions run https://github.com/sudodan/WindowSmash/actions/runs/39353958956 passed on commit 810058211b5189309c9e17389ce1e25e8acfc1b7: 18/18 CPU helper checks, 15,360/15,360 generated-code checks including native ARM64 comparisons, and 320/320 Metal outputs/guards on the Apple Paravirtual device. The iOS ARM64 app compiled and its unsigned IPA was packaged successfully. These are Mac runner results, not iPhone results. Physical iPhone memory behavior, full-game semantics, guest exceptions/fibers and translated game shaders remain unverified.
+
+## Version 3 — reusable host memory backend
+
+`runtime/platform/vm.h` and `vm_posix.c` implement owned host-page reservations,
+permission changes, zero-on-recommit decommit, and release. The iPhone probe now
+uses this backend for all fixed-address tests. It also checks collision safety,
+invalid/overflowing ranges, decommit/recommit zeroing and neighboring page data.
+GitHub Actions runs the same backend on macOS before compiling the device app.
+
+This is the memory foundation for the Apple port, not yet a replacement of the
+Windows kernel/loader. API ownership and threading rules are in `vm.h`. Decommit
+uses MAP_FIXED only inside a live owned reservation; initial reservations never
+use it. A requested address is a non-destructive mmap hint, accepted only when the
+returned address matches exactly. No executable mappings or JIT are requested.
+
+The backend rejects non-host-page-aligned operations. Upstream `kernel.c` allocates
+thread-local regions in 4096-byte increments, so it cannot simply call this API on
+a host with larger pages. A guest-page layer must track subpage commitments and
+avoid discarding neighboring guest pages. Independent permissions and true aliases
+also need design work. This limitation is deliberate and appears in the report.
+Windows runtime behavior is unchanged. No game startup or phone test is claimed.
