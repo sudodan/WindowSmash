@@ -20,7 +20,7 @@ The memory constants are a snapshot of host.h and tools/recomp.py at the commit 
 ## Current validation
 
 Linux x86-64 GCC: 18/18 CPU helper checks passed, including 20,000 atomic increments. AddressSanitizer and UndefinedBehaviorSanitizer also passed with leak detection disabled (LeakSanitizer cannot inspect processes in this environment). Both plist files parsed successfully.
-The first GitHub Actions run passed all 18 CPU checks on a macOS ARM64 runner using Apple Clang. Its iOS app compile exposed an unsupported mach_vm.h include; the probe now uses the iOS SDK vm_* interfaces with compile-time 64-bit size checks. A new build is required to validate that correction. No iPhone execution is claimed.
+The first GitHub Actions run passed all 18 CPU checks on a macOS ARM64 runner using Apple Clang. Its initial iOS app compile exposed an unsupported mach_vm.h include; the probe now uses the iOS SDK vm_* interfaces with compile-time 64-bit size checks. The second build successfully compiled and linked the iOS ARM64 app using Xcode 16.4 / iOS 18.5 SDK (deployment target iOS 16). Packaging then failed due to lipo argument order, corrected in the following revision. No iPhone execution or iOS 26 runtime compatibility is claimed.
 
 ## Build on macOS / hosted runner
 

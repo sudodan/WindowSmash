@@ -24,7 +24,7 @@ jobs:
         run: |
           APP=build/ios-probe/Release-iphoneos/WindowSmashProbe.app
           test -x "$APP/WindowSmashProbe"
-          xcrun lipo -verify_arch arm64 "$APP/WindowSmashProbe"
+          xcrun lipo "$APP/WindowSmashProbe" -verify_arch arm64
           plutil -lint "$APP/Info.plist"
           mkdir -p build/package/Payload
           ditto "$APP" build/package/Payload/WindowSmashProbe.app
