@@ -1,0 +1,37 @@
+name: Upstream Mac code versus iPhone SDK (audit only)
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios/feasibility-probe]
+    paths: ['ios/audit/**', '.github/workflows/ios-upstream-audit.yml']
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: SNO2207/WindowSmash
+          ref: 06f549807b98bd0f9fa307da035a01807919e068
+          path: upstream-audit
+      - name: Compile unchanged upstream units for iPhone (failures identify porting work)
+        run: python3 ios/audit/compile_upstream.py upstream-audit build/upstream-audit
+      - name: Publish audit summary
+        if: always()
+        run: |
+          if test -f build/upstream-audit/SUMMARY.md; then
+            cat build/upstream-audit/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Preserve compiler evidence even when units fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-iphone-compile-audit
+          path: |
+            build/upstream-audit/*.log
+            build/upstream-audit/results.json
+            build/upstream-audit/SUMMARY.md
+          if-no-files-found: error
