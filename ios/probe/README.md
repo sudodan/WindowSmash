@@ -73,6 +73,6 @@ After the workflow succeeds, download its `ios-probe-unsigned` artifact and extr
 
 After local signing/installation, enable Developer Mode if prompted (Settings > Privacy & Security > Developer Mode, restart and confirm). Open Smash Probe and use its Share button to return the full report. If installation fails, preserve the exact error; if the app terminates, return the crash log rather than treating it as a passing run.
 
-## Version 2 validation pending Apple build
+## Version 2 validation — Apple build passed
 
-Linux generated-code checks: 9,216 passed, also with AddressSanitizer and UndefinedBehaviorSanitizer (leak detection disabled for this environment). Native ARM64 comparisons and Metal execution are checked by the next macOS workflow. If a hosted runner exposes no GPU, the Metal test explicitly reports NOT RUN rather than a pass. Physical iPhone memory behavior remains unverified.
+Linux generated-code checks: 9,216 passed, also with AddressSanitizer and UndefinedBehaviorSanitizer (leak detection disabled for this environment). GitHub Actions run https://github.com/sudodan/WindowSmash/actions/runs/39353958956 passed on commit 810058211b5189309c9e17389ce1e25e8acfc1b7: 18/18 CPU helper checks, 15,360/15,360 generated-code checks including native ARM64 comparisons, and 320/320 Metal outputs/guards on the Apple Paravirtual device. The iOS ARM64 app compiled and its unsigned IPA was packaged successfully. These are Mac runner results, not iPhone results. Physical iPhone memory behavior, full-game semantics, guest exceptions/fibers and translated game shaders remain unverified.
