@@ -20,7 +20,7 @@ add_library(AppleCompileAudit OBJECT ${RT}/gpu_shader.c ${RT}/macos/gpu_metal.m)
 target_include_directories(AppleCompileAudit PRIVATE ${RT}/macos/include ${RT}/linux/include ${RT})
 target_compile_options(AppleCompileAudit PRIVATE -fno-strict-aliasing -ffp-contract=off
   -Werror=unguarded-availability-new "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
-add_executable(WindowSmashRuntime MACOSX_BUNDLE main.m core_test.c exception_test.cpp boot_test.c boot_services.c ${RT}/ios/window.m)
+add_executable(WindowSmashRuntime MACOSX_BUNDLE main.m core_test.c exception_test.cpp boot_test.c boot_services.c shader_test.m ${RT}/gpu_shader.c ${RT}/ios/window.m)
 target_include_directories(WindowSmashRuntime PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(WindowSmashRuntime PRIVATE EmbeddedGuest "-framework UIKit" "-framework Metal" "-framework QuartzCore")
 target_compile_options(WindowSmashRuntime PRIVATE -fno-strict-aliasing -ffp-contract=off "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")

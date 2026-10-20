@@ -2,9 +2,11 @@
 #import "ios/window.h"
 #include "core_test.h"
 #include "boot_test.h"
+#include "shader_test.h"
 @interface RuntimeController : UIViewController
 @property(nonatomic, strong) UITextView *text;
 @property(nonatomic, strong) UIBarButtonItem *memoryButton;
+@property(nonatomic, strong) UIBarButtonItem *shaderButton;
 @end
 @implementation RuntimeController
 - (void)viewDidLoad {
@@ -20,12 +22,14 @@
     [self.view addSubview:self.text];
     self.memoryButton=[[UIBarButtonItem alloc] initWithTitle:@"Boot synthetic guest" style:UIBarButtonItemStylePlain target:self action:@selector(testLayout)];
     self.memoryButton.enabled=NO;
-    self.navigationItem.rightBarButtonItem=self.memoryButton;
+    self.shaderButton=[[UIBarButtonItem alloc] initWithTitle:@"Test shaders" style:UIBarButtonItemStylePlain target:self action:@selector(testShaders)];
+    self.shaderButton.enabled=NO;
+    self.navigationItem.rightBarButtonItems=@[self.memoryButton,self.shaderButton];
     self.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAction target:self action:@selector(share)];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0), ^{
         char report[4096]={0}; int result=ws_runtime_test(report,sizeof report);
-        NSString *text=[NSString stringWithFormat:@"Apple runtime integration v0.2\nOS: %@\n\n%s\nCore status: %@\n\nSynthetic guest boot: NOT TESTED. Tap Boot synthetic guest to reserve the upstream address layout and run the loader/kernel fixture.\n\nGraphics source compiles separately; this app does not run the game renderer. No game files included.\n",NSProcessInfo.processInfo.operatingSystemVersionString,report,result?@"FAIL":@"PASS"];
-        dispatch_async(dispatch_get_main_queue(), ^{self.text.text=text; self.memoryButton.enabled=YES;});
+        NSString *text=[NSString stringWithFormat:@"Apple runtime integration v0.3\nOS: %@\n\n%s\nCore status: %@\n\nSynthetic guest boot: NOT TESTED. Tap Boot synthetic guest to reserve the upstream address layout and run the loader/kernel fixture.\n\nShader execution: NOT TESTED. Tap Test shaders to run synthetic GPU comparisons. The full game renderer is not exercised. No game files included.\n",NSProcessInfo.processInfo.operatingSystemVersionString,report,result?@"FAIL":@"PASS"];
+        dispatch_async(dispatch_get_main_queue(), ^{self.text.text=text; self.memoryButton.enabled=YES; self.shaderButton.enabled=YES;});
     });
 }
 - (void)testLayout {
@@ -36,6 +40,18 @@
         char report[8192]={0};
         int result=ws_boot_test(path.fileSystemRepresentation,report,sizeof report);
         NSString *message=[NSString stringWithFormat:@"%s\nSynthetic boot status: %@\n",report,result?@"FAILED/BLOCKED":@"PASS"];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.text.text=[self.text.text stringByAppendingString:message];
+        });
+    });
+}
+- (void)testShaders {
+    self.shaderButton.enabled=NO;
+    self.text.text=[self.text.text stringByAppendingString:@"\nTranslating synthetic shaders and comparing Metal GPU output…\n"];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0), ^{
+        char report[32768]={0};
+        int result=ws_shader_test(report,sizeof report);
+        NSString *message=[NSString stringWithFormat:@"%s\nShader status: %@\n",report,result==77?@"BLOCKED":result?@"FAIL":@"PASS"];
         dispatch_async(dispatch_get_main_queue(), ^{
             self.text.text=[self.text.text stringByAppendingString:message];
         });
